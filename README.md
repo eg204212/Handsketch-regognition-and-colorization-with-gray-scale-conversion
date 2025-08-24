@@ -1,4 +1,4 @@
-#Handsketch Recognition and Colorization
+# Handsketch Recognition and Colorization
 
 A web application to recognize and colorize hand-drawn sketches using a pretrained transformer model. Users can either upload an image or draw directly on a canvas, and the system will:
 
