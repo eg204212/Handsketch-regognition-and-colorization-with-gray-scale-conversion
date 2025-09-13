@@ -1,44 +1,78 @@
-# src/colorize.py
-
+import torch
+from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, DDIMScheduler
+from diffusers.utils import load_image
+from PIL import Image
 import cv2
-import os
+import numpy as np
 
-def colorize_any(input_path, output_path=None, colormap=cv2.COLORMAP_JET):
+# Decide tensor dtype based on device (CPU cannot handle float16)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if device == "cuda" else torch.float32
+
+# Load ControlNet (for sketch-to-image)
+controlnet = ControlNetModel.from_pretrained(
+    "lllyasviel/sd-controlnet-scribble", torch_dtype=torch_dtype
+)
+
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5",
+    controlnet=controlnet,
+    torch_dtype=torch_dtype
+)
+
+# Switch scheduler (fixes IndexError with PNDM on CPU)
+pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
+
+# Move to device
+pipe = pipe.to(device)
+
+
+def colorize_any(input_path, label, output_path="datasets/colorized_output.png"):
     """
-    Colorize a grayscale image using a colormap.
+    Generate both colored and grayscale realistic images from a sketch.
     
     Args:
-        input_path (str): Path to the input grayscale image.
-        output_path (str, optional): Path to save the colorized image.
-                                     Defaults to 'datasets/colorized_output.png'.
-        colormap (OpenCV Colormap, optional): OpenCV colormap to apply. Default is COLORMAP_JET.
-        
+        input_path (str): Path to input sketch image.
+        label (str): Predicted label from classifier.
+        output_path (str): Path to save the colorized image.
+    
     Returns:
-        str: Path to the colorized image.
+        tuple(str, str): Paths to (colorized_image, grayscale_image)
     """
-    if not os.path.exists(input_path):
-        raise FileNotFoundError(f"Image not found: {input_path}")
+    # Load sketch
+    sketch = load_image(input_path)
+    print("Sketch size:", sketch.size)
 
-    # Read image as grayscale
-    gray = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-    if gray is None:
-        raise ValueError(f"Failed to read image: {input_path}")
+    # Prompt for realistic generation
+    prompt = f"A realistic photo of a {label}"
 
-    # Apply OpenCV colormap
-    colored = cv2.applyColorMap(gray, colormap)
+    # Generate image
+    result = pipe(
+        prompt,
+        image=sketch,
+        num_inference_steps=50,
+        guidance_scale=9.0
+    )
 
-    # Set default output path if not provided
-    if output_path is None:
-        os.makedirs("datasets", exist_ok=True)
-        output_path = "datasets/colorized_output.png"
+    # Save colorized result
+    colorized_img = result.images[0]
+    colorized_img.save(output_path)
+    print(f"Generated color image saved at: {output_path}")
 
-    # Save colorized image
-    cv2.imwrite(output_path, colored)
-    print(f"Colorized image saved at: {output_path}")
+    # Convert to grayscale using OpenCV
+    colorized_np = np.array(colorized_img)
+    gray_np = cv2.cvtColor(colorized_np, cv2.COLOR_RGB2GRAY)
+    gray_img = Image.fromarray(gray_np)
 
-    return output_path
+    gray_output_path = output_path.replace(".png", "_gray.png")
+    gray_img.save(gray_output_path)
+    print(f"Generated grayscale image saved at: {gray_output_path}")
+
+    return output_path, gray_output_path
 
 
 if __name__ == "__main__":
-    # Example usage
-    colorize_any("datasets/gray_output.png")
+    test_input = "datasets/sample_sketch.png"
+    label = "tree"
+    color_path, gray_path = colorize_any(test_input, label)
+    print(f"Outputs: {color_path}, {gray_path}")

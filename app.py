@@ -1,3 +1,5 @@
+# app.py
+
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 from src.grayscale import convert_to_grayscale
@@ -10,8 +12,9 @@ from datetime import datetime
 
 st.title("Handsketch Recognition and Colorization")
 
-# Create datasets folder if not exists
+# Create required folders
 os.makedirs("datasets", exist_ok=True)
+os.makedirs("outputs", exist_ok=True)
 
 # --- User choice: upload or draw ---
 option = st.radio("Choose input method:", ["Upload Sketch", "Draw Sketch"])
@@ -29,14 +32,12 @@ if option == "Upload Sketch":
 
 # --- Draw Sketch ---
 elif option == "Draw Sketch":
-    # Button to reset canvas
     if "canvas_key" not in st.session_state:
         st.session_state.canvas_key = f"canvas_{datetime.now().timestamp()}"
 
     if st.button("🗑️ New Sketch"):
         st.session_state.canvas_key = f"canvas_{datetime.now().timestamp()}"
 
-    # Create canvas
     canvas_result = st_canvas(
         fill_color="white",
         stroke_width=5,
@@ -48,7 +49,6 @@ elif option == "Draw Sketch":
         key=st.session_state.canvas_key
     )
 
-    # Save drawing if available
     if canvas_result.image_data is not None:
         drawn_img = cv2.cvtColor(canvas_result.image_data.astype(np.uint8), cv2.COLOR_RGBA2RGB)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -62,17 +62,28 @@ if input_image:
 
     # Predict label
     label, confidence = predict_sketch(gray_path)
-    prediction_text = f"Predicted Label: **{label}** (Confidence: {confidence*100:.2f}%)"
+    prediction_text = f"Predicted Label: *{label}* (Confidence: {confidence*100:.2f}%)"
 
-    # Colorize sketch
-    colorized_path = colorize_any(gray_path)
+    # Try colorization
+    try:
+        output_file = f"outputs/colorized_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        colorized_path = colorize_any(gray_path, label, output_file)
+    except Exception as e:
+        colorized_path = None
+        st.error(f"Colorization failed: {e}")
 
     # --- Display images in horizontal line ---
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.image(input_image, caption="Original Sketch", use_container_width=True)
-        st.markdown(prediction_text)
-    with col2:
-        st.image(gray_path, caption="Grayscale Sketch", use_container_width=True)
-    with col3:
-        st.image(colorized_path, caption="Colorized Sketch", use_container_width=True)
+    
+
+colorized_path, gray_real_path = colorize_any(gray_path, label, output_file)
+
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.image(input_image, caption="Original Sketch")
+    st.markdown(prediction_text)
+with col2:
+    st.image(gray_path, caption="Grayscale Sketch")
+with col3:
+    st.image(gray_real_path, caption="Generated Grayscale Real")
+with col4:
+    st.image(colorized_path, caption="Colorized Result")

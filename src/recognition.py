@@ -1,3 +1,4 @@
+# src/recognition.py
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 from PIL import Image
 import torch
