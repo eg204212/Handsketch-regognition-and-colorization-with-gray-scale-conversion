@@ -1,5 +1,3 @@
-# app.py
-
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 from src.grayscale import convert_to_grayscale
@@ -64,26 +62,21 @@ if input_image:
     label, confidence = predict_sketch(gray_path)
     prediction_text = f"Predicted Label: *{label}* (Confidence: {confidence*100:.2f}%)"
 
-    # Try colorization
+    # Try colorization + grayscale-real generation
     try:
         output_file = f"outputs/colorized_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        colorized_path = colorize_any(gray_path, label, output_file)
+        colorized_path, gray_real_path = colorize_any(gray_path, label, output_file)
     except Exception as e:
-        colorized_path = None
+        colorized_path, gray_real_path = None, None
         st.error(f"Colorization failed: {e}")
 
-    # --- Display images in horizontal line ---
-    
-
-colorized_path, gray_real_path = colorize_any(gray_path, label, output_file)
-
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.image(input_image, caption="Original Sketch")
-    st.markdown(prediction_text)
-with col2:
-    st.image(gray_path, caption="Grayscale Sketch")
-with col3:
-    st.image(gray_real_path, caption="Generated Grayscale Real")
-with col4:
-    st.image(colorized_path, caption="Colorized Result")
+    # --- Display images in horizontal line (without grayscale sketch) ---
+    if colorized_path and gray_real_path:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.image(input_image, caption="Original Sketch", width="stretch")
+            st.markdown(prediction_text)
+        with col2:
+            st.image(gray_real_path, caption="Generated Grayscale Real", width="stretch")
+        with col3:
+            st.image(colorized_path, caption="Colorized Result", width="stretch")
